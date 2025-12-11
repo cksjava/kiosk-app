@@ -2,6 +2,18 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import Database from "better-sqlite3";
+import MPV from "node-mpv";
+
+// --------------------- MPV player setup ---------------------
+const mpv = new MPV({
+  audio_only: true,
+  ipcCommand: true,
+  auto_restart: true,
+  debug: false
+});
+
+// Handle errors silently so server keeps running
+mpv.on("error", err => console.error("MPV error:", err.message));
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,6 +47,27 @@ app.get("/album/:album", (req, res) => {
     .prepare("SELECT * FROM tracks WHERE album = ? ORDER BY id")
     .all(req.params.album);
   res.json(rows);
+});
+
+// Play a track by ID
+app.get("/play/:id", (req, res) => {
+  const track = db.prepare("SELECT path FROM tracks WHERE id=?").get(req.params.id);
+  if (!track) return res.status(404).send("Track not found");
+  mpv.load(track.path)
+    .then(() => res.send("Playing " + track.path))
+    .catch(e => res.status(500).send(e.message));
+});
+
+// Pause / resume
+app.get("/pause", async (_req, res) => {
+  await mpv.togglePause();
+  res.send("Toggled pause");
+});
+
+// Stop playback
+app.get("/stop", async (_req, res) => {
+  await mpv.stop();
+  res.send("Stopped");
 });
 
 const PORT = 3000;
