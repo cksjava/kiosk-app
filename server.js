@@ -29,7 +29,7 @@ function playWithMpv(filePath) {
   // Adjust args if you need a specific device: e.g. --audio-device=alsa/plughw:0,0
   mpvProcess = spawn(
     "mpv",
-    ["--audio-device", "alsa/plughw:1,0", "--no-video", "--really-quiet", filePath],
+    ["--audio-device=alsa/plughw:1,0", "--no-video", "--really-quiet", filePath],
     { stdio: ["ignore", "pipe", "pipe"] }
   );
 
