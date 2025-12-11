@@ -54,7 +54,7 @@ async function scanDir(dir) {
       const existing = existingPaths.get(fullPath);
       if (existing && existing === lastMod) continue; // unchanged
 
-      const metadata = await mm.parseFile(fullPath);
+      const metadata = await parseFile(fullPath);
       const { title, artist, album, picture } = metadata.common;
       const duration = metadata.format.duration || 0;
 
