@@ -2,52 +2,81 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import Database from "better-sqlite3";
-import MPV from "node-mpv";
-
-// --------------------- MPV player setup ---------------------
-const mpv = new MPV({
-  audio_only: true,
-  ipcCommand: true,
-  auto_restart: true,
-  debug: false
-});
-
-// Start MPV once on server startup
-(async () => {
-  try {
-    await mpv.start();
-    console.log("MPV started");
-  } catch (err) {
-    console.error("Failed to start MPV:", err);
-  }
-})();
-
-// Handle errors silently so server keeps running
-mpv.on("error", err => console.error("MPV error:", err.message));
+import { spawn } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const db = new Database(path.join(__dirname, "music.db"));
 
-// Home page
+// ----------------- MPV control via child_process -----------------
+
+let mpvProcess = null;
+
+function playWithMpv(filePath) {
+  // Stop any existing playback
+  if (mpvProcess) {
+    try {
+      mpvProcess.kill("SIGTERM");
+    } catch (e) {
+      console.error("Error killing existing mpv:", e);
+    }
+    mpvProcess = null;
+  }
+
+  console.log("Spawning mpv for:", filePath);
+
+  // Adjust args if you need a specific device: e.g. --audio-device=alsa/plughw:0,0
+  mpvProcess = spawn("mpv", ["--no-video", "--really-quiet", filePath], {
+    stdio: "ignore", // no need to inherit terminal
+  });
+
+  mpvProcess.on("exit", (code, signal) => {
+    console.log(`mpv exited (code=${code}, signal=${signal})`);
+    mpvProcess = null;
+  });
+}
+
+function stopMpv() {
+  if (mpvProcess) {
+    console.log("Stopping mpv");
+    try {
+      mpvProcess.kill("SIGTERM");
+    } catch (e) {
+      console.error("Error killing mpv:", e);
+    }
+    mpvProcess = null;
+  }
+}
+
+// ----------------- Existing routes -----------------
+
 app.get("/", (_req, res) => {
-  res.send(`<html><body><h1>🎵 Raspberry Pi Audio Kiosk</h1>
-  <p>Try <a href="/tracks">/tracks</a> or <a href="/albums">/albums</a></p>
-  </body></html>`);
+  res.send(`
+    <html>
+      <body style="font-family:sans-serif;text-align:center;padding-top:4rem;">
+        <h1>🎵 Raspberry Pi Audio Kiosk</h1>
+        <p>Try <a href="/tracks">/tracks</a> or <a href="/albums">/albums</a></p>
+      </body>
+    </html>
+  `);
 });
 
 // All tracks
 app.get("/tracks", (_req, res) => {
-  const rows = db.prepare("SELECT * FROM tracks ORDER BY artist, album, id").all();
+  const rows = db
+    .prepare("SELECT * FROM tracks ORDER BY artist, album, id")
+    .all();
   res.json(rows);
 });
 
-// Distinct albums with artist
+// Distinct albums
 app.get("/albums", (_req, res) => {
-  const rows = db.prepare(
-    "SELECT album, artist, COUNT(*) as trackCount FROM tracks GROUP BY album, artist ORDER BY artist"
-  ).all();
+  const rows = db
+    .prepare(
+      "SELECT album, artist, COUNT(*) as trackCount FROM tracks GROUP BY album, artist ORDER BY artist"
+    )
+    .all();
   res.json(rows);
 });
 
@@ -59,8 +88,10 @@ app.get("/album/:album", (req, res) => {
   res.json(rows);
 });
 
-// Play a track by ID
-app.get("/play/:id", async (req, res) => {
+// ----------------- Playback routes -----------------
+
+// Play track by ID
+app.get("/play/:id", (req, res) => {
   try {
     const track = db.prepare("SELECT path FROM tracks WHERE id = ?").get(req.params.id);
     if (!track) {
@@ -69,8 +100,7 @@ app.get("/play/:id", async (req, res) => {
     }
 
     console.log("Request to play:", track.path);
-    await mpv.load(track.path); // no `.then`, just await
-
+    playWithMpv(track.path);
     res.send("Playing " + track.path);
   } catch (e) {
     console.error("Play error:", e);
@@ -78,20 +108,10 @@ app.get("/play/:id", async (req, res) => {
   }
 });
 
-// Pause / resume
-app.get("/pause", async (_req, res) => {
+// Stop playback
+app.get("/stop", (_req, res) => {
   try {
-    await mpv.togglePause();
-    res.send("Toggled pause");
-  } catch (e) {
-    console.error("Pause error:", e);
-    res.status(500).send(e.message || "Error toggling pause");
-  }
-});
-
-app.get("/stop", async (_req, res) => {
-  try {
-    await mpv.stop();
+    stopMpv();
     res.send("Stopped");
   } catch (e) {
     console.error("Stop error:", e);
