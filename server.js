@@ -19,6 +19,8 @@ if (fs.existsSync(MPV_SOCKET)) fs.unlinkSync(MPV_SOCKET);
 const mpv = spawn("mpv", [
   "--idle=yes",
   "--no-terminal",
+  "--no-video",        // <─ prevent album-art display
+  "--vo=null",         // <─ disable any video output backend
   "--input-ipc-server=" + MPV_SOCKET,
   "--audio-device=alsa/plughw:CARD=IQaudIODAC,DEV=0"
 ]);
