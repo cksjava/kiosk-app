@@ -103,5 +103,5 @@ export async function runScan() {
   console.log("Scan complete.");
 }
 
-await scanDir(MUSIC_DIR);
-console.log("Indexing complete.");
+// await scanDir(MUSIC_DIR);
+// console.log("Indexing complete.");

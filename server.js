@@ -5,6 +5,7 @@ import Database from "better-sqlite3";
 import { spawn } from "child_process";
 import net from "net";
 import fs from "fs";
+import { runScan } from "./indexer.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -127,8 +128,13 @@ app.get("/cover/:id", (req, res) => {
 });
 
 app.post("/rescan", async (_req, res) => {
-  await scanDir("/mnt/musicdrive");
-  res.send("Rescan complete");
+  try {
+    await runScan();
+    res.send("Rescan complete");
+  } catch (e) {
+    console.error("Rescan error:", e);
+    res.status(500).send(e.message || "Rescan failed");
+  }
 });
 
 // ----------------- Playback routes -----------------
