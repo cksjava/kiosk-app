@@ -16,7 +16,6 @@ const db = new Database(path.join(__dirname, "music.db"));
 const MPV_SOCKET = "/tmp/mpvsocket";
 if (fs.existsSync(MPV_SOCKET)) fs.unlinkSync(MPV_SOCKET);
 
-import { spawn } from "child_process";
 const mpv = spawn("mpv", [
   "--idle=yes",
   "--no-terminal",
