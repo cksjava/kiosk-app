@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
-import mm from "music-metadata";
+import { parseFile } from "music-metadata";
 
 const MUSIC_DIR = "/mnt/musicdrive";
 const db = new Database("music.db");
@@ -26,7 +26,7 @@ async function scanDir(dir) {
       await scanDir(fullPath);
     } else if (entry.name.toLowerCase().endsWith(".flac")) {
       try {
-        const metadata = await mm.parseFile(fullPath);
+        const metadata = await parseFile(fullPath);
         const { title, artist, album } = metadata.common;
         const duration = metadata.format.duration || 0;
         const stmt = db.prepare(`
