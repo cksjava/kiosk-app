@@ -82,6 +82,9 @@ function mpvCommand(cmdArray) {
 //   }
 // }
 
+// ----------------- Static serving ------------------
+app.use(express.static(path.join(__dirname, "../kiosk-ui/dist")));
+
 // ----------------- Existing routes -----------------
 
 app.get("/", (_req, res) => {
