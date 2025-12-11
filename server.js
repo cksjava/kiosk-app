@@ -3,56 +3,82 @@ import path from "path";
 import { fileURLToPath } from "url";
 import Database from "better-sqlite3";
 import { spawn } from "child_process";
+import net from "net";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const db = new Database(path.join(__dirname, "music.db"));
 
+// ---- Persistent mpv instance with JSON IPC ----
+const MPV_SOCKET = "/tmp/mpvsocket";
+if (fs.existsSync(MPV_SOCKET)) fs.unlinkSync(MPV_SOCKET);
+
+import { spawn } from "child_process";
+const mpv = spawn("mpv", [
+  "--idle=yes",
+  "--no-terminal",
+  "--input-ipc-server=" + MPV_SOCKET,
+  "--audio-device=alsa/plughw:CARD=IQaudIODAC,DEV=0"
+]);
+
+mpv.on("exit", c => console.log("mpv exited with code", c));
+
 // ----------------- MPV control via child_process -----------------
 
-let mpvProcess = null;
+// let mpvProcess = null;
 
-function playWithMpv(filePath) {
-  // Stop any existing playback
-  if (mpvProcess) {
-    try {
-      mpvProcess.kill("SIGTERM");
-    } catch (e) {
-      console.error("Error killing existing mpv:", e);
-    }
-    mpvProcess = null;
-  }
-
-  console.log("Spawning mpv for:", filePath);
-
-  // Adjust args if you need a specific device: e.g. --audio-device=alsa/plughw:0,0
-  mpvProcess = spawn(
-    "mpv",
-    ["--audio-device=alsa/plughw:1,0", "--no-video", "--really-quiet", filePath],
-    { stdio: ["ignore", "pipe", "pipe"] }
-  );
-
-  mpvProcess.stdout.on("data", d => console.log("mpv:", d.toString()));
-  mpvProcess.stderr.on("data", d => console.error("mpv err:", d.toString()));
-
-  mpvProcess.on("exit", (code, signal) => {
-    console.log(`mpv exited (code=${code}, signal=${signal})`);
-    mpvProcess = null;
+function mpvCommand(cmdArray) {
+  return new Promise((resolve, reject) => {
+    const client = net.createConnection(MPV_SOCKET);
+    const msg = JSON.stringify({ command: cmdArray }) + "\n";
+    client.write(msg);
+    client.end();
+    resolve();
   });
 }
 
-function stopMpv() {
-  if (mpvProcess) {
-    console.log("Stopping mpv");
-    try {
-      mpvProcess.kill("SIGTERM");
-    } catch (e) {
-      console.error("Error killing mpv:", e);
-    }
-    mpvProcess = null;
-  }
-}
+// function playWithMpv(filePath) {
+//   // Stop any existing playback
+//   if (mpvProcess) {
+//     try {
+//       mpvProcess.kill("SIGTERM");
+//     } catch (e) {
+//       console.error("Error killing existing mpv:", e);
+//     }
+//     mpvProcess = null;
+//   }
+
+//   console.log("Spawning mpv for:", filePath);
+
+//   // Adjust args if you need a specific device: e.g. --audio-device=alsa/plughw:0,0
+//   mpvProcess = spawn(
+//     "mpv",
+//     ["--audio-device=alsa/plughw:1,0", "--no-video", "--really-quiet", filePath],
+//     { stdio: ["ignore", "pipe", "pipe"] }
+//   );
+
+//   mpvProcess.stdout.on("data", d => console.log("mpv:", d.toString()));
+//   mpvProcess.stderr.on("data", d => console.error("mpv err:", d.toString()));
+
+//   mpvProcess.on("exit", (code, signal) => {
+//     console.log(`mpv exited (code=${code}, signal=${signal})`);
+//     mpvProcess = null;
+//   });
+// }
+
+// function stopMpv() {
+//   if (mpvProcess) {
+//     console.log("Stopping mpv");
+//     try {
+//       mpvProcess.kill("SIGTERM");
+//     } catch (e) {
+//       console.error("Error killing mpv:", e);
+//     }
+//     mpvProcess = null;
+//   }
+// }
 
 // ----------------- Existing routes -----------------
 
@@ -93,35 +119,41 @@ app.get("/album/:album", (req, res) => {
   res.json(rows);
 });
 
-// ----------------- Playback routes -----------------
-
-// Play track by ID
-app.get("/play/:id", (req, res) => {
-  try {
-    const track = db.prepare("SELECT path FROM tracks WHERE id = ?").get(req.params.id);
-    if (!track) {
-      console.error("Track not found for id:", req.params.id);
-      return res.status(404).send("Track not found");
-    }
-
-    console.log("Request to play:", track.path);
-    playWithMpv(track.path);
-    res.send("Playing " + track.path);
-  } catch (e) {
-    console.error("Play error:", e);
-    res.status(500).send(e.message || "Error starting playback");
-  }
+app.get("/cover/:id", (req, res) => {
+  const track = db.prepare("SELECT path FROM tracks WHERE id=?").get(req.params.id);
+  const jpg = path.join(__dirname, "covers", path.basename(track.path) + ".jpg");
+  if (fs.existsSync(jpg)) res.sendFile(jpg);
+  else res.status(404).send("No cover");
 });
 
-// Stop playback
-app.get("/stop", (_req, res) => {
-  try {
-    stopMpv();
-    res.send("Stopped");
-  } catch (e) {
-    console.error("Stop error:", e);
-    res.status(500).send(e.message || "Error stopping playback");
-  }
+app.post("/rescan", async (_req, res) => {
+  await scanDir("/mnt/musicdrive");
+  res.send("Rescan complete");
+});
+
+// ----------------- Playback routes -----------------
+
+app.get("/play/:id", async (req, res) => {
+  const track = db.prepare("SELECT path FROM tracks WHERE id=?").get(req.params.id);
+  if (!track) return res.status(404).send("Track not found");
+  await mpvCommand(["loadfile", track.path]);
+  res.send("Playing " + track.path);
+});
+
+app.get("/pause", async (_req, res) => {
+  await mpvCommand(["cycle", "pause"]);
+  res.send("Toggled pause");
+});
+
+app.get("/stop", async (_req, res) => {
+  await mpvCommand(["stop"]);
+  res.send("Stopped");
+});
+
+app.get("/volume/:value", async (req, res) => {
+  const v = parseInt(req.params.value);
+  await mpvCommand(["set_property", "volume", v]);
+  res.send("Volume set to " + v);
 });
 
 const PORT = 3000;
