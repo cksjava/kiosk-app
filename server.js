@@ -12,6 +12,16 @@ const mpv = new MPV({
   debug: false
 });
 
+// Start MPV once on server startup
+(async () => {
+  try {
+    await mpv.start();
+    console.log("MPV started");
+  } catch (err) {
+    console.error("Failed to start MPV:", err);
+  }
+})();
+
 // Handle errors silently so server keeps running
 mpv.on("error", err => console.error("MPV error:", err.message));
 
@@ -50,24 +60,43 @@ app.get("/album/:album", (req, res) => {
 });
 
 // Play a track by ID
-app.get("/play/:id", (req, res) => {
-  const track = db.prepare("SELECT path FROM tracks WHERE id=?").get(req.params.id);
-  if (!track) return res.status(404).send("Track not found");
-  mpv.load(track.path)
-    .then(() => res.send("Playing " + track.path))
-    .catch(e => res.status(500).send(e.message));
+app.get("/play/:id", async (req, res) => {
+  try {
+    const track = db.prepare("SELECT path FROM tracks WHERE id = ?").get(req.params.id);
+    if (!track) {
+      console.error("Track not found for id:", req.params.id);
+      return res.status(404).send("Track not found");
+    }
+
+    console.log("Request to play:", track.path);
+    await mpv.load(track.path); // no `.then`, just await
+
+    res.send("Playing " + track.path);
+  } catch (e) {
+    console.error("Play error:", e);
+    res.status(500).send(e.message || "Error starting playback");
+  }
 });
 
 // Pause / resume
 app.get("/pause", async (_req, res) => {
-  await mpv.togglePause();
-  res.send("Toggled pause");
+  try {
+    await mpv.togglePause();
+    res.send("Toggled pause");
+  } catch (e) {
+    console.error("Pause error:", e);
+    res.status(500).send(e.message || "Error toggling pause");
+  }
 });
 
-// Stop playback
 app.get("/stop", async (_req, res) => {
-  await mpv.stop();
-  res.send("Stopped");
+  try {
+    await mpv.stop();
+    res.send("Stopped");
+  } catch (e) {
+    console.error("Stop error:", e);
+    res.status(500).send(e.message || "Error stopping playback");
+  }
 });
 
 const PORT = 3000;
