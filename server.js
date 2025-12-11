@@ -27,9 +27,14 @@ function playWithMpv(filePath) {
   console.log("Spawning mpv for:", filePath);
 
   // Adjust args if you need a specific device: e.g. --audio-device=alsa/plughw:0,0
-  mpvProcess = spawn("mpv", ["--audio-device", "alsa/plugin:1,0", "--no-video", "--really-quiet", filePath], {
-    stdio: "ignore", // no need to inherit terminal
-  });
+  mpvProcess = spawn(
+    "mpv",
+    ["--audio-device", "alsa/plughw:1,0", "--no-video", "--really-quiet", filePath],
+    { stdio: ["ignore", "pipe", "pipe"] }
+  );
+
+  mpvProcess.stdout.on("data", d => console.log("mpv:", d.toString()));
+  mpvProcess.stderr.on("data", d => console.error("mpv err:", d.toString()));
 
   mpvProcess.on("exit", (code, signal) => {
     console.log(`mpv exited (code=${code}, signal=${signal})`);
