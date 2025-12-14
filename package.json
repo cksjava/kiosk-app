@@ -11,6 +11,7 @@
   "description": "",
   "dependencies": {
     "better-sqlite3": "^12.5.0",
+    "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "music-metadata": "^11.10.3",
     "net": "^1.0.2"
