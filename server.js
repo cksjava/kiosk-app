@@ -186,7 +186,7 @@ app.get("/albums", (_req, res) => {
       FROM albums a
       LEFT JOIN tracks t ON t.album_id = a.id
       GROUP BY a.id
-      ORDER BY a.artist, a.title
+      ORDER BY a.title, a.artist
       `
     )
     .all();
