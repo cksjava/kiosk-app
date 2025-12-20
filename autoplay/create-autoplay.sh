@@ -1,22 +1,16 @@
 sudo tee /usr/local/bin/cd-autoplay.sh << "EOF"
 #!/bin/bash
+exec >> /tmp/cd-autoplay.log 2>&1
 
-LOG="/tmp/cd-autoplay.log"
+echo "=== AUTOPLAY $(date) ==="
 
-echo "CD event triggered at $(date)" >> $LOG
+# Stop any previous run
+pkill -f "mpv.*cdda://" 2>/dev/null || true
 
-# Kill any existing mpv playback
-pkill -f "mpv cdda://" 2>/dev/null
-
-# Small delay to let the drive settle
 sleep 2
 
-# Play audio CD
-/usr/bin/mpv \
-  cdda:// \
+/usr/bin/mpv cdda:// \
   --no-video \
-  --gapless-audio=yes \
   --audio-device=alsa/plughw:CARD=IQaudIODAC,DEV=0 \
-  --volume=80 \
-  >> $LOG 2>&1
+  --volume=80
 EOF
