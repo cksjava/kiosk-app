@@ -1,1 +1,1 @@
-mpv cdda:// --audio-device=alsa/default
+mpv cdda:// --audio-device=alsa/plughw:CARD=IQaudIODAC,DEV=0

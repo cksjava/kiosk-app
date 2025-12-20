@@ -16,7 +16,7 @@ sleep 2
   cdda:// \
   --no-video \
   --gapless-audio=yes \
-  --audio-device=alsa/default \
+  --audio-device=alsa/plughw:CARD=IQaudIODAC,DEV=0 \
   --volume=80 \
   >> $LOG 2>&1
 EOF
